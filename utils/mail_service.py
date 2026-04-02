@@ -5,6 +5,7 @@ import re
 import socket
 import string
 import time
+import threading
 from email import message_from_string
 from email.header import decode_header, make_header
 from email.message import Message
@@ -19,10 +20,16 @@ from utils import config as cfg
 
 
 _CM_TOKEN_CACHE: Optional[str] = None
-LAST_ATTEMPT_EMAIL: Optional[str] = None
 _FREEMAIL_COOKIE_CACHE = {}
-
+_thread_data = threading.local()
 _orig_sleep = time.sleep
+
+def set_last_email(email: str):
+    _thread_data.last_attempt_email = email
+
+def get_last_email() -> Optional[str]:
+    return getattr(_thread_data, 'last_attempt_email', None)
+
 def _smart_sleep(secs):
     for _ in range(int(secs * 10)):
         if getattr(cfg, 'GLOBAL_STOP', False):
@@ -105,7 +112,6 @@ def _get_fm_cookie(fm_url: str, fm_user: str, fm_pass: str, proxies: Any = None)
 
 def get_email_and_token(proxies: Any = None) -> tuple:
     """兼容五种邮箱模式的地址创建，返回 (email, token_or_id)。"""
-    global LAST_ATTEMPT_EMAIL
     if getattr(cfg, 'GLOBAL_STOP', False): return None, None
     letters = "".join(random.choices(string.ascii_lowercase, k=5))
     digits  = "".join(random.choices(string.digits, k=random.randint(1, 3)))
@@ -122,6 +128,7 @@ def get_email_and_token(proxies: Any = None) -> tuple:
             if data.get("email") and data.get("id"):
                 email = data["email"]
                 mailbox_id = data["id"]
+                set_last_email(email)
                 print(f"[{cfg.ts()}] [INFO] mail-curl 分配邮箱: {email} (BoxID: {mailbox_id})")
                 return email, mailbox_id
         except Exception as e:
@@ -146,6 +153,7 @@ def get_email_and_token(proxies: Any = None) -> tuple:
                 proxies=mail_proxies, timeout=15,
             )
             if res.json().get("code") == 200:
+                set_last_email(email_str)
                 print(f"[{cfg.ts()}] [INFO] CloudMail 成功创建用户: {email_str}")
                 return email_str, ""
             print(f"[{cfg.ts()}] [ERROR] CloudMail 创建用户失败: {res.text}")
@@ -202,7 +210,7 @@ def get_email_and_token(proxies: Any = None) -> tuple:
                 data = res.json()
                 if data and data.get("email"):
                     email = data["email"].strip()
-                    LAST_ATTEMPT_EMAIL = email
+                    set_last_email(email)
                     print(f"[{cfg.ts()}] [INFO] 成功通过 Freemail 生成临时邮箱: {email}")
                     return email, ""
                 time.sleep(1)
@@ -220,6 +228,7 @@ def get_email_and_token(proxies: Any = None) -> tuple:
     email_str = f"{prefix}@{selected_domain}"
 
     if mode == "imap":
+        set_last_email(email_str)
         print(f"[{cfg.ts()}] [INFO] 成功生成临时域名邮箱: {email_str}")
         return email_str, ""
 
@@ -252,6 +261,7 @@ def get_email_and_token(proxies: Any = None) -> tuple:
             if data and data.get("address"):
                 email = data["address"].strip()
                 jwt = data.get("jwt", "").strip()
+                set_last_email(email)
                 print(f"[{cfg.ts()}] [INFO] 成功获取临时邮箱: {email}")
                 return email, jwt
             print(f"[{cfg.ts()}] [WARNING] 邮箱申请失败 (尝试 {attempt+1}/5): {res.text}")
