@@ -22,6 +22,8 @@ It also supports **random multi-level subdomain generation**, designed to work t
 ## Environment Setup
 Install Python Dependencies Install the required base libraries using the requirements.txt file in the root directory:
 
+Required: Python 3.12.6
+
 ```bash
 pip install -r requirements.txt
 ```
