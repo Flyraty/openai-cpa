@@ -92,7 +92,7 @@ pip install -r requirements.txt
   - **Smart Tech Subdomains**: Generates trending tech/AI keywords (e.g., `vector-database`, `neural`) to be seamlessly injected into the multi-level subdomain generator, significantly increasing account credibility.
 
 ### Mailbox and OTP workflow
-- **Multi-backend mailbox support**: Supports `cloudflare_temp_email`, `freemail`, `imap`, `cloudmail`, `mail_curl`, and `luckmail`.
+- **Multi-backend mailbox support**: Supports `cloudflare_temp_email`, `freemail`, `imap`, `cloudmail`, `mail_curl`, `luckmail`, `TempMail.org`, `Tempmail.lol`, `Duckmail`, `Generator` and `GmailOauth`.
 - **Multi-domain rotation**: Supports comma-separated mailbox domains and randomized selection when generating addresses.
 - **Random multi-level subdomain generation**: Can generate random subdomains in batches, including multi-level subdomain structures.
 - **Subdomain pool takeover**: When subdomain mode is enabled, generated subdomains can directly replace the normal mailbox domain pool for subsequent registration tasks.
