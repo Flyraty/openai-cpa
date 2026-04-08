@@ -396,7 +396,7 @@ def _parse_workspace_from_auth_cookie(auth_cookie: str) -> list:
     return claims.get("workspaces") or []
 
 
-def run(proxy: Optional[str]) -> tuple:
+def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
     processed_mails: set = set()
     proxy = cfg.format_docker_url(proxy)
     if proxy and proxy.startswith("socks5://"):
@@ -486,6 +486,7 @@ def run(proxy: Optional[str]) -> tuple:
 
         if pwd_resp.status_code != 200:
             print(f"[{cfg.ts()}] [ERROR] 设密码环节被拦截，返回: {pwd_resp.status_code}，该提示可忽略，不影响后面执行流程")
+            if run_ctx is not None: run_ctx['pwd_blocked'] = True
             return None, None
 
         try:
@@ -919,6 +920,7 @@ def run(proxy: Optional[str]) -> tuple:
                             ), password
             else:
                 print(f"[{cfg.ts()}] [ERROR] 手机号接码验证彻底失败: {next_url_or_reason}")
+        if run_ctx is not None: run_ctx['phone_verify'] = True
         print(f"[{cfg.ts()}] [ERROR] OAuth 授权链路追踪失败！当前死在网页: {current_url}")
         return None, None
 

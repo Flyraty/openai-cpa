@@ -249,6 +249,8 @@ async def get_stats(token: str = Depends(verify_token)):
         "success": stats["success"],
         "failed": stats["failed"],
         "retries": stats["retries"],
+        "pwd_blocked": stats.get("pwd_blocked", 0),
+        "phone_verify": stats.get("phone_verify", 0),
         "total": total_attempts,
         "target": stats["target"] if stats["target"] > 0 else "∞",
         "success_rate": f"{success_rate}%",

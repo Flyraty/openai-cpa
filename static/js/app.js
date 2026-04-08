@@ -59,6 +59,7 @@ createApp({
             evtSource: null,
             stats: {
                 success: 0, failed: 0, retries: 0, total: 0, target: 0,
+                pwd_blocked: 0, phone_verify: 0,
                 success_rate: '0.0%', elapsed: '0.0s', avg_time: '0.0s', progress_pct: '0%',
                 mode: '未启动'
             },
@@ -192,7 +193,7 @@ createApp({
                     this.config.tg_bot.template_success = "🎉 <b>注册成功</b>\n📧 账号: <code>{email}</code>\n🔑 密码: <code>{password}</code>";
                 }
                 if (!this.config.tg_bot.template_stop) {
-                    this.config.tg_bot.template_stop = "🛑 <b>系统已收到停止指令</b>\n\n📊 <b>最终运行统计</b>：\n成功率: {success_rate}% · 成功: {success}/{target} · 失败: {failed} 次 · 风控拦截: {retries} 次 · 总耗时: {elapsed_time}s · 平均单号: {avg_time}s";
+                    this.config.tg_bot.template_stop = "🛑 <b>系统已收到停止指令</b>\n\n📊 <b>最终运行统计</b>：\n成功率: {success_rate}% · 成功: {success}/{target} · 失败: {failed} 次 · 风控拦截: {retries} 次 · 密码受阻: {pwd_blocked} 次 · 出现手机: {phone_verify} 次 · 总耗时: {elapsed_time}s · 平均单号: {avg_time}s";
                 }
 				if (!this.config.sub_domain_level) {
                     this.config.sub_domain_level = 1;
