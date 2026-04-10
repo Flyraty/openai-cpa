@@ -116,7 +116,11 @@ def _worker_push_thread():
                             s = core_engine.run_stats
                             is_running = engine.is_running()
                             total = s["success"] + s["failed"]
-                            elapsed = round(time.time() - s["start_time"], 1) if (is_running and s["start_time"] > 0) else 0
+                            if is_running:
+                                elapsed = round(time.time() - s["start_time"], 1) if s.get("start_time", 0) > 0 else 0
+                                s["_frozen_elapsed"] = elapsed
+                            else:
+                                elapsed = s.get("_frozen_elapsed", 0)
 
                             stats_payload = {
                                 "success": s["success"], "failed": s["failed"], "retries": s["retries"],
