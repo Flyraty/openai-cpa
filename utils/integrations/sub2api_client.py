@@ -21,6 +21,16 @@ class Sub2APIClient:
             "impersonate": "chrome110",
         }
 
+    def _get_test_model_id(self) -> str:
+        default_model = "gpt-5.4"
+        try:
+            import utils.config as cfg
+        except ImportError:
+            return default_model
+
+        model_id = str(getattr(cfg, "SUB2API_TEST_MODEL", default_model) or "").strip()
+        return model_id or default_model
+
     def _handle_response(
         self,
         response: cffi_requests.Response,
@@ -310,7 +320,7 @@ class Sub2APIClient:
             response = cffi_requests.post(
                 url,
                 headers=self.headers,
-                json={},
+                json={"model_id": self._get_test_model_id()},
                 timeout=60,
                 impersonate="chrome110",
             )

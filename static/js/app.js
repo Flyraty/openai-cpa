@@ -326,6 +326,9 @@ createApp({
                 if (this.config.sub2api_mode.enable_ws_mode === undefined) {
                     this.config.sub2api_mode.enable_ws_mode = true;
                 }
+                if (this.config.sub2api_mode.test_model === undefined) {
+                    this.config.sub2api_mode.test_model = 'gpt-5.4';
+                }
                 if(this.config.clash_proxy_pool && Array.isArray(this.config.clash_proxy_pool.blacklist)) {
                     this.blacklistStr = this.config.clash_proxy_pool.blacklist.join('\n');
                 }

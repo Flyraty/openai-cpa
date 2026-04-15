@@ -218,6 +218,7 @@ sub2api_mode:
   remove_on_limit_reached: true
   remove_dead_accounts: true
   enable_token_revive: false
+  test_model: "gpt-5.4"
   check_interval_minutes: 60
   threads: 10
   account_concurrency: 10
