@@ -57,6 +57,31 @@ class GeneratorEmailService:
             print(f"[{cfg.ts()}] [ERROR] GeneratorEmail 创建异常: {e}")
         return None, None
 
+    def _extract_verification_code_from_html(self, html: str) -> str:
+        if not html:
+            return ""
+
+        direct = re.findall(r"Your ChatGPT code is (\d{6})", html, re.I)
+        if direct:
+            return direct[-1]
+
+        h1_codes = re.findall(r"<h1[^>]*>\s*(\d{6})\s*</h1>", html, re.I)
+        if h1_codes:
+            return h1_codes[-1]
+
+        visible_text = re.sub(r"<[^>]+>", " ", html)
+
+        contextual = re.findall(r"(?:openai|chatgpt)[\s\S]{0,200}?(\d{6})", visible_text, re.I)
+        if contextual:
+            return contextual[-1]
+
+        if "openai" in visible_text.lower() or "chatgpt" in visible_text.lower():
+            generic = re.findall(r"\b(\d{6})\b", visible_text)
+            if generic:
+                return generic[-1]
+
+        return ""
+
     def get_verification_code(self, surl: str) -> str:
         if not surl:
             return ""
@@ -74,15 +99,7 @@ class GeneratorEmailService:
                 impersonate="chrome110"
             )
             if resp.status_code == 200:
-                html = resp.text or ""
-                direct = re.findall(r"Your ChatGPT code is (\d{6})", html, re.I)
-                if direct: return direct[-1]
-
-                contextual = re.findall(r"(?:openai|chatgpt)[\s\S]{0,200}?(\d{6})", html, re.I)
-                if contextual: return contextual[-1]
-                if "openai" in html.lower() or "chatgpt" in html.lower():
-                    generic = re.findall(r"\b(\d{6})\b", html)
-                    if generic: return generic[-1]
+                return self._extract_verification_code_from_html(resp.text or "")
 
         except Exception as e:
             pass
