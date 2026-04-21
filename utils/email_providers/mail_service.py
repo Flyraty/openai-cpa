@@ -19,6 +19,7 @@ from utils import config as cfg
 from utils.integrations.ai_service import AIService
 from utils.email_providers.gmail_service import get_gmail_otp_via_oauth
 from utils.email_providers.duckmail_service import DuckMailService
+from utils.email_providers.postman_center import global_postman_fleet, wait_for_code
 
 class ProxyIMAP4_SSL(imaplib.IMAP4_SSL):
     """支持 Socks5 和 HTTP 代理的局部 IMAP 客户端"""
@@ -437,7 +438,24 @@ def get_email_and_token(proxies: Any = None) -> tuple:
         email = mailbox_info["email"]
         set_last_email(email)
         print(f"[{cfg.ts()}] [INFO] 微软库分配并锁定账号: ({mask_email(email)})")
+        global_postman_fleet.add_mailbox_listener(ms_service, mailbox_info)
         return email, json.dumps(mailbox_info, ensure_ascii=False)
+
+    if mode == "gmail_fission":
+        from utils.email_providers.gmail_fission_service import GmailFissionService
+        gmail_service = GmailFissionService(proxies=mail_proxies)
+        mailbox_info = gmail_service.get_unused_mailbox()
+
+        if not mailbox_info:
+            cfg.POOL_EXHAUSTED = True
+            print(f"[{cfg.ts()}] [WARNING] Gmail 裂变池已耗尽或生成重复过多，停止派发。")
+            return None, None
+
+        target_email = mailbox_info["email"]
+        set_last_email(target_email)
+        print(f"[{cfg.ts()}] [INFO] Gmail 库分配并锁定账号: ({mask_email(target_email)})")
+        global_postman_fleet.add_mailbox_listener(gmail_service, mailbox_info)
+        return target_email, json.dumps(mailbox_info, ensure_ascii=False)
 
     prefix, ai_enabled = _get_ai_data_package()
 
@@ -651,68 +669,6 @@ def _create_imap_conn(proxy_str=None):
         return ProxyIMAP4_SSL(cfg.IMAP_SERVER, cfg.IMAP_PORT, proxy_url=proxy_str, timeout=15)
     return imaplib.IMAP4_SSL(cfg.IMAP_SERVER, cfg.IMAP_PORT, timeout=15)
 
-
-def _poll_local_ms_for_oai_code_graph(ms_service, target_email: str, mailbox_dict: dict, max_attempts: int) -> str:
-    from datetime import datetime
-    import time
-
-    assigned_at = float(mailbox_dict.get("assigned_at") or time.time())
-    tgt = target_email.lower().strip()
-    master_email = tgt.split('+')[0] + '@' + tgt.split('@')[1] if '+' in tgt else tgt
-
-    processed_msg_ids = set()
-
-    print(f"[{cfg.ts()}] [INFO] 进入 Graph 轮询器，靶向目标: {mask_email(tgt)}", flush=True)
-
-    for attempt in range(max_attempts):
-        if getattr(cfg, 'GLOBAL_STOP', False): return ""
-
-        messages = ms_service.fetch_openai_messages(mailbox_dict)
-        if mailbox_dict.get("_polling_stopped") == "abuse_mode":
-            return ""
-        if not messages:
-            if attempt % 2 == 0:
-                print(f"[{cfg.ts()}] [INFO] {mask_email(tgt)} 第 {attempt + 1} 次轮询: 未发现任何邮件", flush=True)
-        else:
-            for msg in messages:
-                msg_id = msg.get('id')
-                if msg_id in processed_msg_ids:
-                    continue
-                raw_date = msg.get('receivedDateTime', '').replace('Z', '+00:00')
-                try:
-                    received_ts = datetime.fromisoformat(raw_date).timestamp()
-                    if received_ts < assigned_at - 60:
-                        continue
-                except Exception:
-                    continue
-                sender = str(msg.get('from', {}).get('emailAddress', {}).get('address', '')).lower()
-                if "openai.com" not in sender:
-                    continue
-                subject = msg.get('subject', '').lower()
-                if not any(k in subject for k in ["code", "verify", "chatgpt", "openai"]):
-                    continue
-
-                recipients = [str(r.get('emailAddress', {}).get('address', '')).lower().strip()
-                              for r in msg.get('toRecipients', [])]
-                body_content = msg.get('body', {}).get('content', '')
-
-                is_hit = (tgt in recipients) or (f"to: {tgt}" in body_content.lower()) or (tgt in body_content.lower())
-
-                if not is_hit and master_email in recipients and (time.time() - received_ts < 30):
-                    is_hit = True
-
-                if is_hit:
-                    code = _extract_otp_code(f"{subject}\n{body_content}")
-                    if code:
-                        print(f"\n[{cfg.ts()}] [SUCCESS] 🎯 成功捕获专属验证码: {code} -> {mask_email(tgt)}", flush=True)
-                        return code
-
-                processed_msg_ids.add(msg_id)
-
-        time.sleep(5)
-    return ""
-
-
 def get_oai_code(
         email: str,
         jwt: str = "",
@@ -756,18 +712,19 @@ def get_oai_code(
             pass
 
         if local_ms_account:
-            local_ms_account["email"] = str(local_ms_account.get("email") or email).strip()
-            local_ms_account["assigned_at"] = time.time() - 30
-            from utils.email_providers.local_microsoft_service import LocalMicrosoftService
-            ms_service = LocalMicrosoftService(proxies=mail_proxies)
-            return _poll_local_ms_for_oai_code_graph(
-                ms_service=ms_service,
-                target_email=email,
-                mailbox_dict=local_ms_account,
-                max_attempts=max_attempts
-            )
+            timeout = max_attempts * 3
+            return wait_for_code(email, timeout=timeout)
         else:
             print(f"\n[{cfg.ts()}] [ERROR] 缺少微软邮箱凭据，无法收信。")
+            return ""
+
+    if mode == "gmail_fission":
+        timeout = max_attempts * 3
+        code = wait_for_code(email, timeout=timeout)
+        if code:
+            return code
+        else:
+            print(f"[{cfg.ts()}] [ERROR] ({mask_email(email)}) 邮递员等待超时，未收到验证码。")
             return ""
 
     for attempt in range(max_attempts):
