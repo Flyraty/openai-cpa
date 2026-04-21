@@ -59,9 +59,10 @@ def _build_account_item(token_data: Dict[str, Any], settings: Dict[str, Any], pr
             "expires_at": int(time.time() + 864000),
             "expires_in": 863999,
             "model_mapping": {
-                "gpt-4o": "gpt-4o",
-                "gpt-4": "gpt-4",
-                "gpt-3.5-turbo": "gpt-3.5-turbo",
+                "gpt-5.2":"gpt-5.2",
+                "gpt-5.3-codex":"gpt-5.3-codex",
+                "gpt-5.4":"gpt-5.4",
+                "gpt-5.4-mini":"gpt-5.4-mini",
             },
             "organization_id": token_data.get("workspace_id", ""),
             "refresh_token": token_data.get("refresh_token", ""),
@@ -256,10 +257,13 @@ class Sub2APIClient:
                 working_token_data["sub2api_proxy"] = proxy_obj
 
         account_name = working_token_data.get("email", "unknown")[:64]
+        group_ids = settings.get("group_ids") or []
+
+
         if not refresh_token or proxy_obj:
             ok, msg = self._import_account(working_token_data, settings)
-            if ok and settings.get("group_ids"):
-                self._force_bind_groups(account_name, settings["group_ids"])
+            if ok:
+                self._force_bind_groups(account_name, group_ids)
             return ok, msg
 
         url = f"{self.api_url}/api/v1/admin/accounts"
@@ -291,23 +295,20 @@ class Sub2APIClient:
             ok, result = self._handle_response(response, success_codes=(200, 201))
             if not ok:
                 import_ok, import_msg = self._import_account(working_token_data, settings)
-                if import_ok and settings.get("group_ids"):
-                    self._force_bind_groups(account_name, settings["group_ids"])
+                if import_ok:
+                    self._force_bind_groups(account_name, group_ids)
                 return import_ok, import_msg
-
             account_id = result.get("data", {}).get("id") if isinstance(result, dict) else None
             if account_id:
                 self._refresh_created_account(str(account_id))
             return True, "Sub2API account created successfully"
         except Exception as exc:
             import_ok, import_msg = self._import_account(working_token_data, settings)
-            if import_ok and settings.get("group_ids"):
-                self._force_bind_groups(account_name, settings["group_ids"])
+            if import_ok:
+                self._force_bind_groups(account_name, group_ids)
             return import_ok, import_msg
 
     def _force_bind_groups(self, account_name: str, group_ids: List[int]) -> None:
-        if not group_ids:
-            return
         try:
             fetch_ok, accounts_resp = self.get_accounts(page=1, page_size=50)
             if not fetch_ok: return
@@ -315,12 +316,15 @@ class Sub2APIClient:
             items = accounts_resp.get("data", {}).get("items", []) if isinstance(accounts_resp, dict) else []
             for item in items:
                 if item.get("name") == account_name:
-                    target_id = item.get("id")
-                    self.update_account(str(target_id), {"group_ids": group_ids})
-                    logger.info("强制分组绑定成功 (账号: %s, ID: %s, 分组: %s)", account_name, target_id, group_ids)
+                    target_id = str(item.get("id"))
+
+                    if group_ids:
+                        self.update_account(target_id, {"group_ids": group_ids})
+                        logger.info(f"账号 {account_name} 分组强制绑定成功: {group_ids}")
+                    self._refresh_created_account(target_id)
                     break
         except Exception as exc:
-            logger.error("强制绑定分组时发生异常: %s", exc)
+            logger.error(f"推送后执行强制补丁(绑组+刷新)异常: {exc}")
 
     def update_account(self, account_id: str, update_data: Dict[str, Any]) -> Tuple[bool, Any]:
         url = f"{self.api_url}/api/v1/admin/accounts/{account_id}"
