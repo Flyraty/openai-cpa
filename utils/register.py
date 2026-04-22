@@ -18,7 +18,7 @@ from curl_cffi import requests
 from utils import config as cfg
 from utils.email_providers.mail_service import get_email_and_token, get_oai_code, mask_email
 from utils.integrations.hero_sms import _try_verify_phone_via_hero_sms
-from utils.auth_core import generate_payload
+from utils.auth_core import generate_payload, init_auth
 
 AUTH_URL = "https://auth.openai.com/oauth/authorize"
 TOKEN_URL = "https://auth.openai.com/oauth/token"
@@ -293,9 +293,9 @@ def generate_oauth_url(
         "redirect_uri": redirect_uri,
         "scope": scope,
         "state": state,
+        "prompt": "login",
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
-        "prompt": "login",
         "id_token_add_organizations": "true",
         "codex_cli_simplified_flow": "true",
     }
@@ -454,12 +454,16 @@ def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
             is_takeover = False
             target_continue_url = ""
             try:
-                s_reg.get(oauth_reg.auth_url, proxies=proxies, verify=_ssl_verify(), timeout=15)
-                did = s_reg.cookies.get("oai-did") or ""
-                if not did:
-                    print(f"[{cfg.ts()}] [WARNING] （{mask_email(email)}）未获取到 oai-did，节点环境可能被关注，请更换IP或节点。")
+                did, current_ua =init_auth(
+                    session=s_reg,
+                    email=email,
+                    masked_email=mask_email(email),
+                    proxies=proxies,
+                    verify=_ssl_verify()
+                )
 
-                current_ua = s_reg.headers.get("User-Agent")
+                if not did or not current_ua:
+                    print(f"[{cfg.ts()}] [WARNING] 未获取到 oai-did，节点环境可能被关注。")
 
                 reg_ctx = {}
 
@@ -621,7 +625,6 @@ def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
                                 target_continue_url = str(code_json.get("continue_url") or "").strip()
                             except Exception:
                                 target_continue_url = ""
-
 
                 except Exception as e:
                     pass
@@ -1206,7 +1209,6 @@ def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
                             if code2_resp.status_code != 200:
                                 print(f"[{cfg.ts()}] [ERROR] （{mask_email(email)}）二次安全验证 OTP 校验失败: {code2_resp.status_code}")
                                 return None, None
-
                             next_url = str(code2_resp.json().get("continue_url") or "").strip()
                             resp, current_url = _follow_redirect_chain_local(s_log, next_url, proxies)
                     url_code = ""
@@ -1238,7 +1240,7 @@ def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
                                 s_log, "https://auth.openai.com/api/accounts/create_account",
                                 headers=create_headers, json_body=user_info, proxies=proxies,
                             )
-                            url_code = str(create_account_resp.json())
+                            url_code = create_account_resp.json()
                             current_url = str(create_account_resp.json().get("continue_url") or "").strip()
                             continue
                         if current_url.endswith("/consent") or current_url.endswith("/workspace"):
@@ -1279,7 +1281,7 @@ def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
                                     continue
                                 else:
                                     print(f"[{cfg.ts()}] [ERROR] （{mask_email(email)}） {next_url_or_reason}")
-                                    current_url = next_url_or_reason if next_url_or_reason else current_url
+                                    error_reason = next_url_or_reason
                                     break
                         else:
                             break
@@ -1293,7 +1295,9 @@ def run(proxy: Optional[str], run_ctx: dict = None) -> tuple:
                     url_code = "当前账号被阻断"
                 else:
                     url_code = ""
-                print(f"[{cfg.ts()}] [ERROR] （{mask_email(email)}） OAuth 授权链路追踪失败！当前死在网页: {current_url}{url_code}")
+
+                print(f"[{cfg.ts()}] [ERROR] （{mask_email(email)}） OAuth 授权链路追踪失败！当前死在网页: {current_url}")
+                print(f"[{cfg.ts()}] [ERROR] （{mask_email(email)}） 阻断原因: {error_reason}")
                 return None, None
 
             except Exception as e:
