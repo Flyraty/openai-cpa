@@ -82,14 +82,26 @@ class PostmanFleet:
 
                     recs = [r.get('emailAddress', {}).get('address', '').lower() for r in m.get('toRecipients', [])]
                     body = m.get('body', {}).get('content', '')
+                    subject = m.get('subject', '')
                     code = None
 
-                    direct = re.findall(r"Your ChatGPT code is (\d{6})", body, re.I)
-                    if direct:
-                        code = direct[-1]
+                    new_format = re.findall(r"enter this code:\s*(\d{6})", body, re.I)
+                    if not new_format:
+                        new_format = re.findall(r"verification code to continue:\s*(\d{6})", body, re.I)
+
+                    if new_format:
+                        code = new_format[-1]
                     else:
-                        generic = re.findall(r"\b(\d{6})\b", body)
-                        if generic: code = generic[-1]
+                        direct = re.findall(r"Your (?:ChatGPT|OpenAI) code is (\d{6})", body, re.I)
+                        if direct:
+                            code = direct[-1]
+                        else:
+                            subject_lower = subject.lower()
+                            body_lower = body.lower()
+                            if "chatgpt" in subject_lower or "openai" in subject_lower or "chatgpt" in body_lower or "openai" in body_lower:
+                                generic = re.findall(r"\b(\d{6})\b", body)
+                                if generic:
+                                    code = generic[-1]
 
                     if code:
                         with code_pool_lock:
